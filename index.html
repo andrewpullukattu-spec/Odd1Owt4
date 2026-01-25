@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Odd1Owt</title>
+
+<style>
+  :root{
+    --bg:#0b0b0e; --card:#111114; --panel:#1c1c21; --text:#e5e5e5;
+    --red:#ef4444; --green:#22c55e; --gold:#ffb703; --muted:#9ca3af;
+    --border:rgba(255,255,255,0.08);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;display:flex;justify-content:center;padding:20px}
+  .shell{width:100%;max-width:460px;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px}
+  .logo{font-weight:900;font-size:34px;text-align:center;margin:4px 0 18px}
+  .logo span{color:var(--red)}
+  .bubble{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin:14px 0;line-height:1.35}
+  input,button{width:100%;padding:14px;border-radius:12px;border:1px solid var(--border);font-size:16px}
+  input{background:var(--panel);color:var(--text)}
+  button{cursor:pointer;font-weight:700}
+  .btn-red{background:var(--red);border-color:transparent;color:white}
+  .btn-white{background:white;border-color:transparent;color:black}
+  .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  .row{display:flex;gap:10px}
+  .row > *{flex:1}
+  .small{font-size:12px;color:var(--muted)}
+  .tag{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-weight:800}
+  .list button{margin-top:10px;background:var(--panel);color:var(--text);border:1px solid var(--border);text-align:left}
+  .list button.selected{outline:2px solid var(--green)}
+  .scoreRow{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06)}
+  .scoreVal{color:var(--gold);font-weight:900}
+  .timer{font-size:52px;font-weight:950;text-align:center;color:var(--red);margin:10px 0}
+  .center{text-align:center}
+
+  /* Phase 4 animation */
+  .revealWrap{margin-top:10px}
+  .revealBox{
+    background:linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:18px;
+    overflow:hidden;
+    position:relative;
+  }
+  .sweep{
+    position:absolute; inset:-60px -60px auto -60px;
+    height:120px; transform:rotate(-8deg);
+    background:linear-gradient(90deg, transparent, rgba(255,183,3,0.22), transparent);
+    animation:sweep 1.6s ease-in-out infinite;
+  }
+  @keyframes sweep{0%{transform:translateX(-60%) rotate(-8deg)}100%{transform:translateX(60%) rotate(-8deg)}}
+  .big{font-size:26px;font-weight:950}
+  .win{color:var(--green);font-weight:950}
+  .lose{color:var(--red);font-weight:950}
+</style>
+</head>
+
+<body>
+<div class="shell">
+  <div class="logo">Odd1<span>Owt</span></div>
+
+  <!-- HOME -->
+  <section id="home">
+    <input id="nameInput" placeholder="Your name" />
+    <div class="row">
+      <button class="btn-red" onclick="createRoom()">Create Lobby</button>
+      <button class="btn-white" onclick="show('join')">Join Lobby</button>
+    </div>
+    <div class="small" style="margin-top:10px">Tip: your name saves automatically.</div>
+  </section>
+
+  <!-- JOIN -->
+  <section id="join" style="display:none">
+    <input id="codeInput" placeholder="Lobby code (e.g. A1B2C3)" />
+    <button class="btn-red" onclick="joinRoom()">Join</button>
+    <button class="btn-ghost" style="margin-top:10px" onclick="show('home')">Back</button>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="lobby" style="display:none">
+    <div class="tag">Lobby</div>
+    <div class="bubble" id="playersBox">Waiting for players...</div>
+    <div class="bubble" id="scoreBox"></div>
+    <button class="btn-white" onclick="copyInvite()">Copy Invite Link</button>
+    <button class="btn-red" style="margin-top:10px" onclick="hostStartRound()">Start Round</button>
+    <div class="small center" id="hostHint" style="margin-top:10px"></div>
+  </section>
+
+  <!-- PHASE 1 -->
+  <section id="p1" style="display:none">
+    <div class="tag">Phase 1 — Prompt + Vote</div>
+    <div class="bubble" id="p1Question"></div>
+    <div class="small">Vote who fits the question best (everyone votes).</div>
+    <div class="list" id="p1VoteList"></div>
+    <div class="small center" id="p1Status"></div>
+  </section>
+
+  <!-- PHASE 2 -->
+  <section id="p2" style="display:none">
+    <div class="tag">Phase 2 — Interrogation</div>
+    <div class="bubble"><b>Normal Question:</b><br><span id="p2NormalQ"></span></div>
+    <div class="timer" id="p2Timer">05:00</div>
+    <div class="bubble" id="p2WhoVoted"></div>
+    <button class="btn-white" id="skipBtn" style="display:none" onclick="hostSkipToFinal()">Skip to Final Vote</button>
+    <div class="small center" id="p2Status"></div>
+  </section>
+
+  <!-- PHASE 3 -->
+  <section id="p3" style="display:none">
+    <div class="tag">Phase 3 — Final Vote</div>
+    <div class="bubble"><b>Vote out the Odd1Owt</b></div>
+    <div class="list" id="p3VoteList"></div>
+    <div class="small center" id="p3Status"></div>
+  </section>
+
+  <!-- PHASE 4 -->
+  <section id="p4" style="display:none">
+    <div class="tag">Phase 4 — Reveal</div>
+    <div class="revealWrap">
+      <div class="revealBox">
+        <div class="sweep"></div>
+        <div class="center big" id="p4Title">Revealing...</div>
+        <div class="bubble" id="p4Details" style="margin-top:12px"></div>
+      </div>
+    </div>
+    <div class="bubble" id="p4Score"></div>
+    <button class="btn-red" id="nextRoundBtn" onclick="hostStartRound()">Next Round</button>
+    <div class="small center" id="p4HostNote" style="margin-top:10px"></div>
+  </section>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getFirestore, doc, setDoc, updateDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCaJ-2d3r_qKcSs4aCdhvzZtjAImnZ8YM",
+    authDomain: "odd1owt-ed87d.firebaseapp.com",
+    projectId: "odd1owt-ed87d",
+    storageBucket: "odd1owt-ed87d.appspot.com",
+    messagingSenderId: "615629953512",
+    appId: "1:615629953512:web:046f611961e7c1e556ec5d"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  const questions = [
+    { normal: 'Who is most likely to be pregnant?', odd: 'Who is most liekly to forget their kid at the park' },
+    { normal: 'Who is the most autistic?', odd: 'Who is the most likely to get stuck in revolving doors?' },
+    { normal: 'Who is most likely to crash their car?', odd: 'Who is the messiest?' },
+    { normal: 'Who is most independant?', odd: 'Who is most likely to be sports captain?' },
+    { normal: 'Who is the loudest?', odd: 'Who is the meanest?' },
+    { normal: 'Who is the biggest gossip?', odd: 'Who is most likely to burn a cookie?' },
+    { normal: 'Who is the biggest yapper?', odd: 'Who is always on DND' },
+    { normal: 'Who has the best fashion?', odd: 'Who is the biggest money saver?' },
+    { normal: 'Who is short-tempered?', odd: 'Who is composed?' },
+    { normal: 'Who is most likely to murder someone?', odd: 'Who is most likely to haunt us after they die ?' },
+    { normal: 'Who is most likely to have 10 kids?', odd: 'Who is most likely to become an influencer?' },
+    { normal: 'Who is most likely to read 50 books in a year?', odd: 'Who is most likely to watch a movie and pretend they read the book?' },
+    { normal: 'Who is most likely to own 10 cats?', odd: 'Who is the most likely to swing the other direction?' },
+    { normal: 'Who is the most childish', odd: 'Who is most likely to have cereal with water?' },
+    { normal: 'Who is the most responsible?', odd: 'Who is msot liekly to cross the road without looking?' },
+    { normal: 'Who is most likely to elope?', odd: 'Who is most likely to do heroine?' },
+    { normal: 'Who is the zesiest?', odd: 'Who is the most brainrotted?' },
+    { normal: 'Who is girlypop?', odd: 'Who is least likely to live in a house full of girls?' },
+    { normal: 'Who is the most manly?', odd: 'Who wouldnt kill a spider?' },
+    { normal: 'Who is most likely to go to jail?', odd: 'Who would be the best lawyer?' },
+    { normal: 'Who is most likely to become a priest?', odd: 'Who is the first perosn to get drunk at a party?' },
+    { normal: 'Who is most likely to go on love island?', odd: 'Who is most likely to do heroin?' },
+    { normal: 'Who is most likely to injure themself?', odd: 'Who most likely to be referred to as unc or aunt?' },
+    { normal: 'Who is most likely to get drunk off lemon juice?', odd: 'Who is most likely to drop a 67 out of nowhere? SIXXXSEEVENNN ' },
+    { normal: 'Who smells the best?', odd: 'Who is most likely to wear a dress ?' },
+    { normal: 'Who is the most racist?', odd: 'Who looks best in a saree ?' },
+    { normal: 'Who is most likely to get cancelled?', odd: 'Who is the least controversial?' },
+    { normal: 'Who is the most innocent?', odd: 'Who is the biggest demon?' },
+    { normal: 'Who is the kindest?', odd: 'Who is msot likely to talk to a homeless man?' },
+    { normal: 'Who is the most mature?', odd: 'Who would forget their own phone number?' },
+    { normal: 'Who is the most nonchalant?', odd: 'Who is the most bait?' },
+    { normal: 'Who is the smartest?', odd: 'Who is most likely to wear odd socks?' },
+    { normal: 'Who is the funniest?', odd: 'Who would survive against a gorilla?' },
+    { normal: 'Who is most likely to get hit on the head with a ball?', odd: 'Who is thick in the head?' },
+    { normal: 'Who is most likely to accidentally leave their kid in the park?', odd: 'Who would be the strictest parent?' },
+    { normal: 'Who is the pickiest eater?', odd: 'Who is the most adventurous?' },
+    { normal: 'Who is most likely to lose all their money gambling?', odd: 'Who would be a smart investor?' },
+    { normal: 'Who is most likely to get hit by a car?', odd: 'Who is most likely to not know how to ride a bike?' },
+    { normal: 'Who is msot likely to be a high school teacher?', odd: 'Who is most likely to get sent to headmaster office as an adult?' },
+    { normal: 'Who is the oldest, like ancient, old as hell, pretty much a fossil at this point, like they got bills to pay why they here playing games?', odd: 'Who eats the most oranges' },
+    { normal: 'Who most likely to be in a threesome?', odd: 'Who most likely to die single ?' },
+    { normal: 'Who is the biggest diva?', odd: 'Who would be the leader of a cult?' },
+    { normal: 'Who would you go to in a time of need?', odd: 'Who is the most woke?' },
+    { normal: 'Who do you see as an older brother/sister?', odd: 'Who would you want doing your surgery?' },
+    { normal: 'Who do you look up to?', odd: 'Most likely to cry in a movie?' },
+    { normal: 'Who is a softy?', odd: 'Who is the most humble?' },
+    { normal: 'Who would you want to back you in a fight?', odd: 'Who will be a great parent when they are older?' },
+    { normal: 'Who is a secret yapper?', odd: 'Who is most likely have eaten raisins today?' },
+    { normal: 'Who do/will you miss the most when they left sheffield?', odd: 'Most likely to run into traffic' },
+    { normal: 'Who got the biggest bum?', odd: 'Most likely to run into traffic' }
+    { normal: 'Who is the best gift giver?', odd: 'Who would you not trust to give you a gift?' },
+    { normal: 'Who is most likely to end up in a wheelchair? ', odd: 'Who would you trust to be your caretaker' },
+    { normal: 'Who lacking the most braincells?', odd: 'Who most likely to pop a snus?' }
+    { normal: 'Who is most likely to write a book?', odd: 'Who is most liekly to star in a movie?' },
+    { normal: 'Biggest ego', odd: 'Who would come last in a race' },    
+  ];
+
+  const playerId = localStorage.getItem("odd1owt_pid") || crypto.randomUUID();
+  localStorage.setItem("odd1owt_pid", playerId);
+
+  function getName() {
+    const typed = document.getElementById("nameInput").value.trim();
+    if (typed) localStorage.setItem("odd1owt_name", typed);
+    return localStorage.getItem("odd1owt_name");
+  }
+
+  function show(id) {
+    document.querySelectorAll("section").forEach(s => s.style.display = "none");
+    document.getElementById(id).style.display = "block";
+  }
+  window.show = show;
+
+  function randomCode() {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  }
+
+  function fmtTime(ms) {
+    const t = Math.max(0, Math.floor(ms / 1000));
+    const m = Math.floor(t / 60);
+    const s = t % 60;
+    return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  }
+
+  let roomId = null;
+  let unsub = null;
+  let timerInterval = null;
+  let localRevealTimeout = null;
+
+  function roomRef() {
+    return doc(db, "rooms", roomId);
+  }
+
+  window.createRoom = async function() {
+    const name = getName();
+    if (!name) return alert("Enter your name first.");
+
+    roomId = randomCode();
+    await joinRoomInternal(true);
+  };
+
+  window.joinRoom = async function() {
+    const name = getName();
+    if (!name) return alert("Enter your name first.");
+
+    roomId = document.getElementById("codeInput").value.trim().toUpperCase();
+    if (!roomId) return alert("Enter a lobby code.");
+
+    await joinRoomInternal(false);
+  };
+
+  async function joinRoomInternal(isHost) {
+    const name = getName();
+
+    const ref = roomRef();
+    const snap = await getDoc(ref);
+    const data = snap.exists() ? snap.data() : null;
+
+    // prevent duplicate names
+    if (data?.players) {
+      const taken = Object.entries(data.players).some(([pid, pname]) => pid !== playerId && (pname || "").toLowerCase() === name.toLowerCase());
+      if (taken) return alert("That name is already taken in this lobby.");
+    }
+
+    // ✅ STABLE ORDER: append player once, keep forever
+    const existingOrder = Array.isArray(data?.playerOrder) ? data.playerOrder : [];
+    const nextOrder = existingOrder.includes(playerId) ? existingOrder : [...existingOrder, playerId];
+
+    const newHost = isHost ? playerId : (data?.hostId || null);
+
+    await setDoc(ref, {
+      createdAt: data?.createdAt || Date.now(),
+      hostId: newHost,
+      phase: data?.phase || "lobby",
+      round: data?.round || 0,
+      playerOrder: nextOrder,                 // ✅ NEW
+      players: { ...(data?.players || {}), [playerId]: name },
+      scores: { ...(data?.scores || {}), [playerId]: data?.scores?.[playerId] ?? 0 }
+    }, { merge: true });
+
+    listenRoom();
+    show("lobby");
+  }
+
+  function listenRoom() {
+    if (unsub) unsub();
+    unsub = onSnapshot(roomRef(), snap => {
+      if (!snap.exists()) return;
+
+      const state = snap.data();
+      render(state);
+      tryHostAdvance(state);
+    });
+  }
+
+  window.hostStartRound = async function() {
+    const snap = await getDoc(roomRef());
+    if (!snap.exists()) return;
+    const state = snap.data();
+    if (state.hostId !== playerId) return alert("Only the host can start.");
+
+    const ids = (Array.isArray(state.playerOrder) && state.playerOrder.length)
+      ? state.playerOrder.filter(pid => state.players?.[pid])
+      : Object.keys(state.players || {});
+
+    if (ids.length < 3) return alert("Need at least 3 players.");
+
+    const oddId = ids[Math.floor(Math.random() * ids.length)];
+    const q = questions[Math.floor(Math.random() * questions.length)];
+
+    await updateDoc(roomRef(), {
+      phase: "p1_vote",
+      round: (state.round || 0) + 1,
+      oddId,
+      question: q,
+      p1Votes: {},
+      p3Votes: {},
+      p2EndsAt: null,
+      results: null
+    });
+  };
+
+  window.hostSkipToFinal = async function() {
+    const snap = await getDoc(roomRef());
+    if (!snap.exists()) return;
+    const state = snap.data();
+    if (state.hostId !== playerId) return;
+    if (state.phase !== "p2_interrogate") return;
+
+    await updateDoc(roomRef(), { phase: "p3_finalvote" });
+  };
+
+  // Voting (self voting enabled)
+  async function castP1Vote(targetId) {
+    const snap = await getDoc(roomRef());
+    if (!snap.exists()) return;
+    const state = snap.data();
+    if (state.phase !== "p1_vote") return;
+
+    await updateDoc(roomRef(), { [`p1Votes.${playerId}`]: targetId });
+  }
+
+  async function castP3Vote(targetId) {
+    const snap = await getDoc(roomRef());
+    if (!snap.exists()) return;
+    const state = snap.data();
+    if (state.phase !== "p3_finalvote") return;
+
+    await updateDoc(roomRef(), { [`p3Votes.${playerId}`]: targetId });
+  }
+
+  async function tryHostAdvance(state) {
+    if (state.hostId !== playerId) return;
+
+    const players = state.players || {};
+    const playerCount = Object.keys(players).length;
+
+    if (state.phase === "p1_vote") {
+      const p1 = state.p1Votes || {};
+      if (Object.keys(p1).length === playerCount && playerCount > 0) {
+        const endsAt = Date.now() + 5 * 60 * 1000;
+        await updateDoc(roomRef(), { phase: "p2_interrogate", p2EndsAt: endsAt });
+      }
+      return;
+    }
+
+    if (state.phase === "p2_interrogate") {
+      const endsAt = state.p2EndsAt || 0;
+      if (endsAt && Date.now() >= endsAt) {
+        await updateDoc(roomRef(), { phase: "p3_finalvote" });
+      }
+      return;
+    }
+
+    if (state.phase === "p3_finalvote") {
+      const p3 = state.p3Votes || {};
+      if (Object.keys(p3).length === playerCount && playerCount > 0) {
+        const { votedOutId, tally } = computeMostVoted(p3);
+        const caught = votedOutId === state.oddId;
+
+        const scores = { ...(state.scores || {}) };
+        if (caught) {
+          Object.keys(players).forEach(pid => { if (pid !== state.oddId) scores[pid] = (scores[pid] || 0) + 1; });
+        } else {
+          scores[state.oddId] = (scores[state.oddId] || 0) + 1;
+        }
+
+        await updateDoc(roomRef(), {
+          phase: "p4_reveal",
+          scores,
+          results: {
+            votedOutId, caught, tally,
+            oddId: state.oddId,
+            question: state.question,
+            p1Votes: state.p1Votes || {},
+            p3Votes: state.p3Votes || {}
+          }
+        });
+      }
+    }
+  }
+
+  function computeMostVoted(voteMap) {
+    const tally = {};
+    Object.values(voteMap).forEach(t => tally[t] = (tally[t] || 0) + 1);
+    const entries = Object.entries(tally).sort((a,b) => b[1]-a[1] || a[0].localeCompare(b[0]));
+    const votedOutId = entries[0]?.[0] || null;
+    return { votedOutId, tally };
+  }
+
+  function render(state) {
+    document.getElementById("hostHint").textContent =
+      state.hostId === playerId ? "You are the host." : `Host: ${state.players?.[state.hostId] || "—"}`;
+
+    renderScores(state);
+
+    if (state.phase === "lobby" || !state.phase) {
+      show("lobby");
+      renderLobbyPlayers(state);
+      return;
+    }
+    if (state.phase === "p1_vote") { show("p1"); renderPhase1(state); return; }
+    if (state.phase === "p2_interrogate") { show("p2"); renderPhase2(state); return; }
+    if (state.phase === "p3_finalvote") { show("p3"); renderPhase3(state); return; }
+    if (state.phase === "p4_reveal") { show("p4"); renderPhase4(state); return; }
+
+    show("lobby");
+    renderLobbyPlayers(state);
+  }
+
+  function getOrder(state) {
+    const players = state.players || {};
+    const order = Array.isArray(state.playerOrder) && state.playerOrder.length
+      ? state.playerOrder.filter(pid => players[pid])
+      : Object.keys(players);
+    return order;
+  }
+
+  function renderLobbyPlayers(state) {
+    const players = state.players || {};
+    const order = getOrder(state);
+    const names = order.map(pid => players[pid]).filter(Boolean);
+
+    document.getElementById("playersBox").innerText =
+      `Code: ${roomId}\n\nPlayers:\n` + names.join(", ");
+  }
+
+  function renderScores(state) {
+    const box = document.getElementById("scoreBox");
+    const players = state.players || {};
+    const scores = state.scores || {};
+    const order = getOrder(state);
+
+    // show in stable order, but still show score
+    const rows = order.map(pid => {
+      const name = players[pid];
+      const sc = scores[pid] || 0;
+      return `<div class="scoreRow"><span>${escapeHtml(name)}</span><span class="scoreVal">${sc}</span></div>`;
+    }).join("");
+
+    box.innerHTML = `<b>Scoreboard</b><div style="margin-top:8px">${rows || "<span class='small'>No scores yet.</span>"}</div>`;
+
+    const p4Score = document.getElementById("p4Score");
+    if (p4Score) p4Score.innerHTML = box.innerHTML;
+  }
+
+  function renderPhase1(state) {
+    const q = state.question;
+    const isOdd = playerId === state.oddId;
+    const myQ = isOdd ? q?.odd : q?.normal;
+
+    document.getElementById("p1Question").innerHTML =
+      `<b>Your Prompt:</b><br>${escapeHtml(myQ || "…")}`;
+
+    // ✅ stable vote list order
+    const list = document.getElementById("p1VoteList");
+    list.innerHTML = "";
+    const players = state.players || {};
+    const myVote = state.p1Votes?.[playerId];
+    const order = getOrder(state);
+
+    order.forEach(pid => {
+      const name = players[pid];
+      if (!name) return;
+      const b = document.createElement("button");
+      b.textContent = pid === playerId ? `${name} (You)` : name;
+      b.className = (myVote === pid) ? "selected" : "";
+      b.onclick = () => castP1Vote(pid);
+      list.appendChild(b);
+    });
+
+    const total = Object.keys(players).length;
+    const done = Object.keys(state.p1Votes || {}).length;
+    document.getElementById("p1Status").textContent = `${done}/${total} votes submitted`;
+  }
+
+  function renderPhase2(state) {
+    document.getElementById("p2NormalQ").textContent = state.question?.normal || "";
+
+    const players = state.players || {};
+    const p1 = state.p1Votes || {};
+    let html = "<b>Who voted for who (Phase 1):</b><br><br>";
+    Object.entries(p1).forEach(([voter, target]) => {
+      html += `• ${escapeHtml(players[voter] || "Unknown")} voted ${escapeHtml(players[target] || "Unknown")}<br>`;
+    });
+    if (!Object.keys(p1).length) html += "<span class='small'>No votes yet.</span>";
+    document.getElementById("p2WhoVoted").innerHTML = html;
+
+    if (timerInterval) clearInterval(timerInterval);
+    const endsAt = state.p2EndsAt || (Date.now() + 5*60*1000);
+
+    const tick = () => {
+      const left = endsAt - Date.now();
+      document.getElementById("p2Timer").textContent = fmtTime(left);
+    };
+    tick();
+    timerInterval = setInterval(tick, 250);
+
+    document.getElementById("skipBtn").style.display =
+      (state.hostId === playerId) ? "block" : "none";
+
+    const total = Object.keys(players).length;
+    const done = Object.keys(p1).length;
+    document.getElementById("p2Status").textContent = `Discuss now. Phase 1 votes were ${done}/${total}.`;
+  }
+
+  function renderPhase3(state) {
+    const list = document.getElementById("p3VoteList");
+    list.innerHTML = "";
+    const players = state.players || {};
+    const myVote = state.p3Votes?.[playerId];
+    const order = getOrder(state);
+
+    // ✅ stable vote list order
+    order.forEach(pid => {
+      const name = players[pid];
+      if (!name) return;
+      const b = document.createElement("button");
+      b.textContent = pid === playerId ? `${name} (You)` : name;
+      b.className = (myVote === pid) ? "selected" : "";
+      b.onclick = () => castP3Vote(pid);
+      list.appendChild(b);
+    });
+
+    const total = Object.keys(players).length;
+    const done = Object.keys(state.p3Votes || {}).length;
+    document.getElementById("p3Status").textContent = `${done}/${total} final votes submitted`;
+  }
+
+  function renderPhase4(state) {
+    const players = state.players || {};
+    const res = state.results;
+
+    document.getElementById("nextRoundBtn").style.display = (state.hostId === playerId) ? "block" : "none";
+    document.getElementById("p4HostNote").textContent =
+      (state.hostId === playerId) ? "Start the next round when you're ready." : "Waiting for host to start next round…";
+
+    if (localRevealTimeout) clearTimeout(localRevealTimeout);
+
+    document.getElementById("p4Title").textContent = "Counting votes...";
+    document.getElementById("p4Details").innerHTML = `<span class="small">Stand by…</span>`;
+
+    localRevealTimeout = setTimeout(() => {
+      const votedOutName = players[res.votedOutId] || "Unknown";
+      const oddName = players[res.oddId] || "Unknown";
+      const verdict = res.caught ? `<span class="win">CAUGHT!</span>` : `<span class="lose">ESCAPED!</span>`;
+
+      const tallyLines = Object.entries(res.tally || {})
+        .sort((a,b) => (b[1]-a[1]) || a[0].localeCompare(b[0]))
+        .map(([pid, n]) => `• ${escapeHtml(players[pid] || "Unknown")}: <b>${n}</b>`)
+        .join("<br>");
+
+      document.getElementById("p4Title").innerHTML = verdict;
+      document.getElementById("p4Details").innerHTML = `
+        <b>Most votes:</b> ${escapeHtml(votedOutName)}<br>
+        <b>The Odd1Owt was:</b> ${escapeHtml(oddName)}<br><br>
+        <b>Final vote tally:</b><br>${tallyLines || "<span class='small'>No votes?</span>"}<br><br>
+        <b>Questions:</b><br>
+        Normal: ${escapeHtml(res.question?.normal || "")}<br>
+        Odd: ${escapeHtml(res.question?.odd || "")}
+      `;
+    }, 1400);
+  }
+
+  function escapeHtml(str) {
+    return String(str ?? "").replace(/[&<>"']/g, m => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+    }[m]));
+  }
+
+  window.copyInvite = function() {
+    navigator.clipboard.writeText(`${location.origin}${location.pathname}?room=${roomId}`);
+    alert("Invite link copied!");
+  };
+
+  const params = new URLSearchParams(location.search);
+  if (params.get("room")) {
+    document.getElementById("codeInput").value = params.get("room").toUpperCase();
+    show("join");
+  }
+</script>
+</body>
+</html>
